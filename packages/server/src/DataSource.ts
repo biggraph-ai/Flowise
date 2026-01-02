@@ -65,11 +65,11 @@ export const init = async (): Promise<void> => {
         case 'postgres':
             appDataSource = new DataSource({
                 type: 'postgres',
-                host: process.env.DATABASE_HOST,
+                host: process.env.DATABASE_HOST || 'localhost',
                 port: parseInt(process.env.DATABASE_PORT || '5432'),
-                username: process.env.DATABASE_USER,
-                password: process.env.DATABASE_PASSWORD,
-                database: process.env.DATABASE_NAME,
+                username: process.env.DATABASE_USER || 'flowise',
+                password: process.env.DATABASE_PASSWORD || 'flowise',
+                database: process.env.DATABASE_NAME || 'flowise',
                 ssl: getDatabaseSSLFromEnv(),
                 synchronize: false,
                 migrationsRun: false,
@@ -88,14 +88,28 @@ export const init = async (): Promise<void> => {
             })
             break
         default:
-            homePath = process.env.DATABASE_PATH ?? flowisePath
             appDataSource = new DataSource({
-                type: 'sqlite',
-                database: path.resolve(homePath, 'database.sqlite'),
+                type: 'postgres',
+                host: process.env.DATABASE_HOST || 'localhost',
+                port: parseInt(process.env.DATABASE_PORT || '5432'),
+                username: process.env.DATABASE_USER || 'flowise',
+                password: process.env.DATABASE_PASSWORD || 'flowise',
+                database: process.env.DATABASE_NAME || 'flowise',
+                ssl: undefined,
                 synchronize: false,
                 migrationsRun: false,
                 entities: Object.values(entities),
-                migrations: sqliteMigrations
+                migrations: postgresMigrations,
+                extra: {
+                    idleTimeoutMillis: 120000
+                },
+                logging: ['error', 'warn', 'info', 'log'],
+                logger: 'advanced-console',
+                logNotifications: true,
+                poolErrorHandler: (err) => {
+                    logger.error(`Database pool error: ${JSON.stringify(err)}`)
+                },
+                applicationName: 'Flowise'
             })
             break
     }
