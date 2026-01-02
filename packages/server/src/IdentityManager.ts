@@ -160,7 +160,7 @@ export class IdentityManager {
                 }
             } else if (LICENSE_URL) {
                 try {
-                    const response = await axios.post(`${LICENSE_URL}/enterprise/verify`, { license: FLOWISE_EE_LICENSE_KEY })
+                    const response = await axios.post(`${LICENSE_URL!}/enterprise/verify`, { license: FLOWISE_EE_LICENSE_KEY! })
                     this.licenseValid = response.data?.valid
 
                     if (!LICENSE_URL.includes('api')) this._setPlatform(Platform.ENTERPRISE, 'License URL non-api endpoint')
