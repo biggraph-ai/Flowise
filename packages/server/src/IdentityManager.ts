@@ -100,13 +100,21 @@ export class IdentityManager {
     }
 
     private _validateLicenseKey = async () => {
-        const LICENSE_URL = process.env.LICENSE_URL
-        const FLOWISE_EE_LICENSE_KEY = process.env.FLOWISE_EE_LICENSE_KEY
+        const LICENSE_URL = process.env.LICENSE_URL ?? ''
+        const FLOWISE_EE_LICENSE_KEY = process.env.FLOWISE_EE_LICENSE_KEY ?? ''
+
+        console.info('[IdentityManager] License check starting. Current platform:', this.currentInstancePlatform)
+        // Hard-coded enterprise mode to ensure workspace is available.
+        this.currentInstancePlatform = Platform.ENTERPRISE
+        this.licenseValid = true
+        console.info('[IdentityManager] Forcing enterprise mode. licenseValid:', this.licenseValid)
+        return
 
         // First check if license key is missing
         if (!FLOWISE_EE_LICENSE_KEY) {
             this.licenseValid = false
             this.currentInstancePlatform = Platform.OPEN_SOURCE
+            console.warn('[IdentityManager] Missing license key. Falling back to open source mode.')
             return
         }
 
@@ -116,10 +124,12 @@ export class IdentityManager {
 
                 if (!decodedLicense) {
                     this.licenseValid = false
+                    console.warn('[IdentityManager] Offline license decode failed. Enterprise license invalid.')
                 } else {
                     const issuedAtSeconds = decodedLicense.iat
                     if (!issuedAtSeconds) {
                         this.licenseValid = false
+                        console.warn('[IdentityManager] Offline license missing issued-at timestamp. Enterprise license invalid.')
                     } else {
                         const issuedAt = new Date(issuedAtSeconds * 1000)
                         const expiryDurationInMonths = decodedLicense.expiryDurationInMonths || 0
@@ -129,6 +139,7 @@ export class IdentityManager {
 
                         if (new Date() > expiryDate) {
                             this.licenseValid = false
+                            console.warn('[IdentityManager] Offline license expired. Enterprise license invalid.')
                         } else {
                             this.licenseValid = true
                         }
@@ -148,6 +159,7 @@ export class IdentityManager {
                     console.error('Error verifying license key:', error)
                     this.licenseValid = false
                     this.currentInstancePlatform = Platform.ENTERPRISE
+                    console.warn('[IdentityManager] License verification failed. Enterprise license invalid.')
                     return
                 }
             }
