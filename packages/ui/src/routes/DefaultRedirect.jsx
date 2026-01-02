@@ -1,5 +1,4 @@
 import { useAuth } from '@/hooks/useAuth'
-import { useConfig } from '@/store/context/ConfigContext'
 import { useSelector } from 'react-redux'
 
 // Import all view components
@@ -32,7 +31,6 @@ import Workspaces from '@/views/workspace'
  */
 export const DefaultRedirect = () => {
     const { hasPermission, hasDisplay } = useAuth()
-    const { isOpenSource } = useConfig()
     const isGlobal = useSelector((state) => state.auth.isGlobal)
     const isAuthenticated = useSelector((state) => state.auth.isAuthenticated)
 
@@ -66,11 +64,6 @@ export const DefaultRedirect = () => {
     // If user is not authenticated, show login page
     if (!isAuthenticated) {
         return <Login />
-    }
-
-    // For open source, show chatflows (no permission checks)
-    if (isOpenSource) {
-        return <Chatflows />
     }
 
     // For global admins, show chatflows (they have access to everything)
