@@ -174,8 +174,9 @@ export class AccountService {
                 break
             }
             case Platform.ENTERPRISE: {
-                if (data.user.tempToken) {
-                    const user = await this.userService.readUserByToken(data.user.tempToken, queryRunner)
+                const tempToken = data.user.tempToken ?? undefined
+                if (tempToken) {
+                    const user = await this.userService.readUserByToken(tempToken, queryRunner)
                     if (!user) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, UserErrorMessage.USER_NOT_FOUND)
                     if (user.email.toLowerCase() !== data.user.email?.toLowerCase())
                         throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
