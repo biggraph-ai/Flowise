@@ -174,7 +174,8 @@ export class AccountService {
                 break
             }
             case Platform.ENTERPRISE: {
-                if (data.user.tempToken) {
+                const hasTempToken = Boolean(data.user.tempToken)
+                if (hasTempToken) {
                     const user = await this.userService.readUserByToken(data.user.tempToken, queryRunner)
                     if (!user) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, UserErrorMessage.USER_NOT_FOUND)
                     if (user.email.toLowerCase() !== data.user.email?.toLowerCase())
@@ -204,9 +205,12 @@ export class AccountService {
                     data.workspace.name = WorkspaceName.DEFAULT_PERSONAL_WORKSPACE
                     data.workspaceUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.PERSONAL_WORKSPACE, queryRunner)
                 } else {
+                    // Enterprise self-registration (no temp token); workspace name derived from email.
                     await this.ensureOneOrganizationOnly(queryRunner)
+                    if (!data.user.email) throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
                     data.organizationUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.OWNER, queryRunner)
-                    data.workspace.name = WorkspaceName.DEFAULT_WORKSPACE
+                    const rawWorkspaceName = data.user.email.replace('@', '_')
+                    data.workspace.name = rawWorkspaceName.replace(/[^a-zA-Z0-9_-]/g, '_')
                     data.workspaceUser.role = data.organizationUser.role
                     data.user.status = UserStatus.ACTIVE
                     data.user = await this.userService.createNewUser(data.user, queryRunner)
