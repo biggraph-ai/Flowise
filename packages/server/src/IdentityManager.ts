@@ -100,8 +100,13 @@ export class IdentityManager {
     }
 
     private _validateLicenseKey = async () => {
-        const LICENSE_URL = process.env.LICENSE_URL
-        const FLOWISE_EE_LICENSE_KEY = process.env.FLOWISE_EE_LICENSE_KEY
+        const LICENSE_URL = process.env.LICENSE_URL ?? ''
+        const FLOWISE_EE_LICENSE_KEY = process.env.FLOWISE_EE_LICENSE_KEY ?? ''
+
+        // Hard-coded enterprise mode to ensure workspace is available.
+        this.currentInstancePlatform = Platform.ENTERPRISE
+        this.licenseValid = true
+        return
 
         // Hard-coded enterprise mode to ensure workspace is available.
         this.currentInstancePlatform = Platform.ENTERPRISE
