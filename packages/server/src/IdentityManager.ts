@@ -157,7 +157,12 @@ export class IdentityManager {
     }
 
     public initializeSSO = async (app: express.Application) => {
-        if (this.getPlatformType() === Platform.CLOUD || this.getPlatformType() === Platform.ENTERPRISE) {
+        const enableOpenSourceSSO = process.env.ENABLE_OS_SSO === 'true'
+        if (
+            this.getPlatformType() === Platform.CLOUD ||
+            this.getPlatformType() === Platform.ENTERPRISE ||
+            (this.getPlatformType() === Platform.OPEN_SOURCE && enableOpenSourceSSO)
+        ) {
             const loginMethodService = new LoginMethodService()
             let queryRunner
             try {
