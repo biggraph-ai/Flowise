@@ -56,6 +56,9 @@ abstract class SSOBase {
             let user: any = await userService.readUserByEmail(email, queryRunner)
             let wu: any = {}
 
+            const resolvedEmail = email || profile.emails?.[0]?.value || ''
+            const resolvedName = profile.displayName || profile.username || resolvedEmail
+
             if (!user) {
                 // In ENTERPRISE mode, we don't want to create a new user if the user is not found
                 if (getRunningExpressApp().identityManager.getPlatformType() === Platform.ENTERPRISE) {
@@ -64,10 +67,11 @@ abstract class SSOBase {
                 // no user found, register the user
                 const data: any = {
                     user: {
-                        email: email,
-                        name: profile.displayName || email,
+                        email: resolvedEmail,
+                        name: resolvedName,
                         status: UserStatus.ACTIVE,
-                        credential: undefined
+                        credential: undefined,
+                        tempToken: ''
                     }
                 }
                 const platformType = getRunningExpressApp().identityManager.getPlatformType()
@@ -83,8 +87,8 @@ abstract class SSOBase {
                     const data: any = {
                         user: {
                             ...user,
-                            email,
-                            name: profile.displayName || '',
+                            email: resolvedEmail || user.email,
+                            name: profile.displayName || user.name || resolvedName,
                             status: UserStatus.ACTIVE,
                             credential: undefined
                         }
