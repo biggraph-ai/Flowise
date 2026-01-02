@@ -179,9 +179,10 @@ export class AccountService {
                 if (normalizedTempToken) {
                     data.user.tempToken = normalizedTempToken
                 }
-                const hasTempToken = Boolean(normalizedTempToken)
+                const tokenForLookup = normalizedTempToken ?? undefined
+                const hasTempToken = Boolean(tokenForLookup)
                 if (hasTempToken) {
-                    const user = await this.userService.readUserByToken(data.user.tempToken, queryRunner)
+                    const user = await this.userService.readUserByToken(tokenForLookup, queryRunner)
                     if (!user) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, UserErrorMessage.USER_NOT_FOUND)
                     if (user.email.toLowerCase() !== data.user.email?.toLowerCase())
                         throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
