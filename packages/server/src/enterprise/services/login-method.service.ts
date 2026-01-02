@@ -8,6 +8,7 @@ import { decrypt, encrypt } from '../utils/encryption.util'
 import { UserErrorMessage, UserService } from './user.service'
 import { OrganizationErrorMessage, OrganizationService } from './organization.service'
 import { IsNull } from 'typeorm'
+import { Platform } from '../../Interface'
 
 export const enum LoginMethodErrorMessage {
     INVALID_LOGIN_METHOD_ID = 'Invalid Login Method Id',
@@ -101,7 +102,7 @@ export class LoginMethodService {
     }
 
     public async createOrUpdateConfig(body: any) {
-        let organizationId: string = body.organizationId
+        let organizationId: string | undefined = body.organizationId || undefined
         let providers: any[] = body.providers
         let userId: string = body.userId
 
@@ -112,8 +113,15 @@ export class LoginMethodService {
             await queryRunner.startTransaction()
             const createdOrUpdatedByUser = await this.userService.readUserById(userId, queryRunner)
             if (!createdOrUpdatedByUser) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, UserErrorMessage.USER_NOT_FOUND)
-            const organization = await this.organizationService.readOrganizationById(organizationId, queryRunner)
-            if (!organization) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, OrganizationErrorMessage.ORGANIZATION_NOT_FOUND)
+            if (organizationId) {
+                const organization = await this.organizationService.readOrganizationById(organizationId, queryRunner)
+                if (!organization) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, OrganizationErrorMessage.ORGANIZATION_NOT_FOUND)
+            } else if (
+                getRunningExpressApp().identityManager.getPlatformType() !== Platform.OPEN_SOURCE ||
+                process.env.ENABLE_OS_SSO !== 'true'
+            ) {
+                throw new InternalFlowiseError(StatusCodes.NOT_FOUND, OrganizationErrorMessage.ORGANIZATION_NOT_FOUND)
+            }
 
             for (let provider of providers) {
                 this.validateLoginMethodName(provider.providerName)

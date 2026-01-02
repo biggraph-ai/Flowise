@@ -14,6 +14,11 @@ import GoogleSSO from '../sso/GoogleSSO'
 import { decrypt } from '../utils/encryption.util'
 
 export class LoginMethodController {
+    private isOpenSourceSSOEnabled() {
+        const identityManager = getRunningExpressApp().identityManager
+        return identityManager.getPlatformType() === Platform.OPEN_SOURCE && process.env.ENABLE_OS_SSO === 'true'
+    }
+
     public async create(req: Request, res: Response, next: NextFunction) {
         try {
             const loginMethodService = new LoginMethodService()
@@ -40,6 +45,8 @@ export class LoginMethodController {
                 } else {
                     return res.status(StatusCodes.OK).json({})
                 }
+            } else if (this.isOpenSourceSSOEnabled()) {
+                organizationId = undefined
             } else {
                 return res.status(StatusCodes.OK).json({})
             }
@@ -66,6 +73,9 @@ export class LoginMethodController {
         try {
             queryRunner = getRunningExpressApp().AppDataSource.createQueryRunner()
             await queryRunner.connect()
+            if (getRunningExpressApp().identityManager.getPlatformType() === Platform.OPEN_SOURCE && !this.isOpenSourceSSOEnabled()) {
+                return res.status(StatusCodes.OK).json({})
+            }
             const query = req.query as Partial<LoginMethod>
             const loginMethodService = new LoginMethodService()
 
@@ -83,8 +93,9 @@ export class LoginMethodController {
                 loginMethod = await loginMethodService.readLoginMethodById(query.id, queryRunner)
                 if (!loginMethod) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, LoginMethodErrorMessage.LOGIN_METHOD_NOT_FOUND)
                 loginMethod.config = JSON.parse(await decrypt(loginMethod.config))
-            } else if (query.organizationId) {
-                loginMethod = await loginMethodService.readLoginMethodByOrganizationId(query.organizationId, queryRunner)
+            } else if (query.organizationId || this.isOpenSourceSSOEnabled()) {
+                const organizationId = query.organizationId || undefined
+                loginMethod = await loginMethodService.readLoginMethodByOrganizationId(organizationId, queryRunner)
 
                 for (let method of loginMethod) {
                     method.config = JSON.parse(await decrypt(method.config))
@@ -102,9 +113,12 @@ export class LoginMethodController {
     }
     public async update(req: Request, res: Response, next: NextFunction) {
         try {
+            if (getRunningExpressApp().identityManager.getPlatformType() === Platform.OPEN_SOURCE && !this.isOpenSourceSSOEnabled()) {
+                return res.status(StatusCodes.OK).json({})
+            }
             const loginMethodService = new LoginMethodService()
             const loginMethod = await loginMethodService.createOrUpdateConfig(req.body)
-            if (loginMethod?.status === 'OK' && loginMethod?.organizationId) {
+            if (loginMethod?.status === 'OK' && (loginMethod?.organizationId || this.isOpenSourceSSOEnabled())) {
                 const appServer = getRunningExpressApp()
                 let providers: any[] = req.body.providers
                 providers.map((provider: any) => {
