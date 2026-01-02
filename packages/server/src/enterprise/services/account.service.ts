@@ -175,9 +175,13 @@ export class AccountService {
                 break
             }
             case Platform.ENTERPRISE: {
-                const tempToken = data.user.tempToken ?? undefined
-                if (tempToken) {
-                    const user = await this.userService.readUserByToken(tempToken, queryRunner)
+                const normalizedTempToken = data.user.tempToken?.trim()
+                if (normalizedTempToken) {
+                    data.user.tempToken = normalizedTempToken
+                }
+                const hasTempToken = Boolean(normalizedTempToken)
+                if (hasTempToken) {
+                    const user = await this.userService.readUserByToken(data.user.tempToken, queryRunner)
                     if (!user) throw new InternalFlowiseError(StatusCodes.NOT_FOUND, UserErrorMessage.USER_NOT_FOUND)
                     if (user.email.toLowerCase() !== data.user.email?.toLowerCase())
                         throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
@@ -208,12 +212,19 @@ export class AccountService {
                 } else {
                     // Enterprise self-registration (no temp token); workspace name derived from email.
                     logger.warn(`[AccountService] Enterprise self-registration without invite for ${data.user.email ?? 'unknown email'}`)
-                    await this.ensureOneOrganizationOnly(queryRunner)
                     if (!data.user.email) throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
-                    data.organizationUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.OWNER, queryRunner)
+                    const organizations = await this.organizationservice.readOrganization(queryRunner)
+                    if (organizations.length > 0) {
+                        data.organization = organizations[0]
+                        data.organizationUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.MEMBER, queryRunner)
+                        data.workspaceUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.PERSONAL_WORKSPACE, queryRunner)
+                    } else {
+                        data.organization.name = OrganizationName.DEFAULT_ORGANIZATION
+                        data.organizationUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.OWNER, queryRunner)
+                        data.workspaceUser.role = data.organizationUser.role
+                    }
                     const rawWorkspaceName = data.user.email.replace('@', '_')
                     data.workspace.name = rawWorkspaceName.replace(/[^a-zA-Z0-9_-]/g, '_')
-                    data.workspaceUser.role = data.organizationUser.role
                     data.user.status = UserStatus.ACTIVE
                     data.user = await this.userService.createNewUser(data.user, queryRunner)
                 }
