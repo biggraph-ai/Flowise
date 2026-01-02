@@ -70,7 +70,8 @@ abstract class SSOBase {
                         credential: undefined
                     }
                 }
-                if (getRunningExpressApp().identityManager.getPlatformType() === Platform.CLOUD) {
+                const platformType = getRunningExpressApp().identityManager.getPlatformType()
+                if (platformType === Platform.CLOUD || platformType === Platform.OPEN_SOURCE) {
                     const accountService = new AccountService()
                     const newAccount = await accountService.register(data)
                     wu = newAccount.workspaceUser
