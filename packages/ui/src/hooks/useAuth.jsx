@@ -36,6 +36,16 @@ export const useAuth = () => {
             return true
         }
 
+        const openSourceFeatureDisplayEnabled =
+            isOpenSource &&
+            features &&
+            !Array.isArray(features) &&
+            (features['feat:open-source-display'] === 'true' || features['feat:open-source-display'] === true)
+
+        if (isOpenSource && !openSourceFeatureDisplayEnabled) {
+            return false
+        }
+
         // if it has display flag, but user has no features, then it should not be displayed
         if (!features || Array.isArray(features) || Object.keys(features).length === 0) {
             return false
