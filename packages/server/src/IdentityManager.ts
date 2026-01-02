@@ -60,6 +60,7 @@ export class IdentityManager {
         if (process.env.STRIPE_SECRET_KEY) {
             this.stripeManager = await StripeManager.getInstance()
         }
+        console.info('[IdentityManager] License check completed. Platform:', this.currentInstancePlatform, 'licenseValid:', this.licenseValid)
     }
 
     public getPlatformType = () => {
@@ -99,13 +100,22 @@ export class IdentityManager {
         }
     }
 
+    private _setPlatform = (platform: Platform, reason: string) => {
+        this.currentInstancePlatform = platform
+        if (platform === Platform.ENTERPRISE) {
+            console.info(`[IdentityManager] Platform set to enterprise. Reason: ${reason}`)
+            return
+        }
+        console.warn(`[IdentityManager] Platform set to ${platform}. Reason: ${reason}`)
+    }
+
     private _validateLicenseKey = async () => {
         const LICENSE_URL = process.env.LICENSE_URL ?? ''
         const FLOWISE_EE_LICENSE_KEY = process.env.FLOWISE_EE_LICENSE_KEY ?? ''
 
         console.info('[IdentityManager] License check starting. Current platform:', this.currentInstancePlatform)
         // Hard-coded enterprise mode to ensure workspace is available.
-        this.currentInstancePlatform = Platform.ENTERPRISE
+        this._setPlatform(Platform.ENTERPRISE, 'Hard-coded enterprise override')
         this.licenseValid = true
         console.info('[IdentityManager] Forcing enterprise mode. licenseValid:', this.licenseValid)
         return
@@ -113,8 +123,7 @@ export class IdentityManager {
         // First check if license key is missing
         if (!FLOWISE_EE_LICENSE_KEY) {
             this.licenseValid = false
-            this.currentInstancePlatform = Platform.OPEN_SOURCE
-            console.warn('[IdentityManager] Missing license key. Falling back to open source mode.')
+            this._setPlatform(Platform.OPEN_SOURCE, 'Missing license key')
             return
         }
 
@@ -124,11 +133,13 @@ export class IdentityManager {
 
                 if (!decodedLicense) {
                     this.licenseValid = false
+                    this._setPlatform(Platform.ENTERPRISE, 'Offline license decode failed')
                     console.warn('[IdentityManager] Offline license decode failed. Enterprise license invalid.')
                 } else {
                     const issuedAtSeconds = decodedLicense.iat
                     if (!issuedAtSeconds) {
                         this.licenseValid = false
+                        this._setPlatform(Platform.ENTERPRISE, 'Offline license missing issued-at timestamp')
                         console.warn('[IdentityManager] Offline license missing issued-at timestamp. Enterprise license invalid.')
                     } else {
                         const issuedAt = new Date(issuedAtSeconds * 1000)
@@ -139,26 +150,30 @@ export class IdentityManager {
 
                         if (new Date() > expiryDate) {
                             this.licenseValid = false
+                            this._setPlatform(Platform.ENTERPRISE, 'Offline license expired')
                             console.warn('[IdentityManager] Offline license expired. Enterprise license invalid.')
                         } else {
                             this.licenseValid = true
+                            this._setPlatform(Platform.ENTERPRISE, 'Offline license valid')
                         }
                     }
                 }
-                this.currentInstancePlatform = Platform.ENTERPRISE
             } else if (LICENSE_URL) {
                 try {
                     const response = await axios.post(`${LICENSE_URL!}/enterprise/verify`, { license: FLOWISE_EE_LICENSE_KEY! })
                     this.licenseValid = response.data?.valid
 
-                    if (!LICENSE_URL!.includes('api')) this.currentInstancePlatform = Platform.ENTERPRISE
-                    else if (LICENSE_URL!.includes('v1')) this.currentInstancePlatform = Platform.ENTERPRISE
-                    else if (LICENSE_URL!.includes('v2')) this.currentInstancePlatform = response.data?.platform
+                    if (!LICENSE_URL.includes('api')) this._setPlatform(Platform.ENTERPRISE, 'License URL non-api endpoint')
+                    else if (LICENSE_URL.includes('v1')) this._setPlatform(Platform.ENTERPRISE, 'License URL v1 endpoint')
+                    else if (LICENSE_URL.includes('v2')) {
+                        const responsePlatform = response.data?.platform ?? Platform.ENTERPRISE
+                        this._setPlatform(responsePlatform, 'License URL v2 endpoint')
+                    }
                     else throw new InternalFlowiseError(StatusCodes.INTERNAL_SERVER_ERROR, GeneralErrorMessage.UNHANDLED_EDGE_CASE)
                 } catch (error) {
                     console.error('Error verifying license key:', error)
                     this.licenseValid = false
-                    this.currentInstancePlatform = Platform.ENTERPRISE
+                    this._setPlatform(Platform.ENTERPRISE, 'License verification failed')
                     console.warn('[IdentityManager] License verification failed. Enterprise license invalid.')
                     return
                 }
