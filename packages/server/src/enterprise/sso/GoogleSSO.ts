@@ -6,11 +6,15 @@ import auditService from '../services/audit'
 import { ErrorMessage, LoggedInUser, LoginActivityCode } from '../Interface.Enterprise'
 import { setTokenOrCookies } from '../middleware/passport'
 import axios from 'axios'
+import { getRunningExpressApp } from '../../utils/getRunningExpressApp'
+import { User } from '../database/entities/user.entity'
 
 class GoogleSSO extends SSOBase {
     static LOGIN_URI = '/api/v1/google/login'
     static CALLBACK_URI = '/api/v1/google/callback'
     static LOGOUT_URI = '/api/v1/google/logout'
+
+    private static readonly SCOPE = 'profile email https://www.googleapis.com/auth/gmail.readonly'
 
     getProviderName(): string {
         return 'Google SSO'
@@ -27,43 +31,63 @@ class GoogleSSO extends SSOBase {
             const clientID = this.ssoConfig.clientID
             const clientSecret = this.ssoConfig.clientSecret
 
-            passport.use(
-                'google',
-                new OpenIDConnectStrategy(
-                    {
-                        issuer: 'https://accounts.google.com',
-                        authorizationURL: 'https://accounts.google.com/o/oauth2/v2/auth',
-                        tokenURL: 'https://oauth2.googleapis.com/token',
-                        userInfoURL: 'https://openidconnect.googleapis.com/v1/userinfo',
-                        clientID: clientID || 'your_google_client_id',
-                        clientSecret: clientSecret || 'your_google_client_secret',
-                        callbackURL: GoogleSSO.getCallbackURL() || 'http://localhost:3000/auth/google/callback',
-                        scope: 'openid profile email'
-                    },
-                    async (
-                        issuer: string,
-                        profile: Profile,
-                        context: object,
-                        idToken: string | object,
-                        accessToken: string | object,
-                        refreshToken: string,
-                        done: VerifyCallback
-                    ) => {
-                        if (profile.emails && profile.emails.length > 0) {
-                            const email = profile.emails[0].value
-                            return this.verifyAndLogin(this.app, email, done, profile, accessToken, refreshToken)
-                        } else {
-                            await auditService.recordLoginActivity(
-                                '<empty>',
-                                LoginActivityCode.UNKNOWN_USER,
-                                ErrorMessage.UNKNOWN_USER,
-                                this.getProviderName()
-                            )
-                            return done({ name: 'SSO_LOGIN_FAILED', message: ErrorMessage.UNKNOWN_USER }, undefined)
+            const strategy = new OpenIDConnectStrategy(
+                {
+                    issuer: 'https://accounts.google.com',
+                    authorizationURL: 'https://accounts.google.com/o/oauth2/v2/auth',
+                    tokenURL: 'https://oauth2.googleapis.com/token',
+                    userInfoURL: 'https://openidconnect.googleapis.com/v1/userinfo',
+                    clientID: clientID || 'your_google_client_id',
+                    clientSecret: clientSecret || 'your_google_client_secret',
+                    callbackURL: GoogleSSO.getCallbackURL() || 'http://localhost:3000/auth/google/callback',
+                    scope: GoogleSSO.SCOPE,
+                    prompt: 'consent'
+                },
+                async (
+                    issuer: string,
+                    profile: Profile,
+                    context: object,
+                    idToken: string | object,
+                    accessToken: string | object,
+                    refreshToken: string,
+                    params: { [key: string]: unknown },
+                    done: VerifyCallback
+                ) => {
+                    if (profile.emails && profile.emails.length > 0) {
+                        const email = profile.emails[0].value
+                        const handleLogin: VerifyCallback = async (error, user, info) => {
+                            if (error || !user) {
+                                return done(error, user, info)
+                            }
+
+                            try {
+                                const loggedInUser = user as LoggedInUser
+                                await this.storeGoogleTokens(loggedInUser.id, accessToken, refreshToken, params)
+                            } catch (storeError) {
+                                return done(storeError as Error)
+                            }
+
+                            return done(null, user, info)
                         }
+
+                        return this.verifyAndLogin(this.app, email, handleLogin, profile, accessToken, refreshToken)
+                    } else {
+                        await auditService.recordLoginActivity(
+                            '<empty>',
+                            LoginActivityCode.UNKNOWN_USER,
+                            ErrorMessage.UNKNOWN_USER,
+                            this.getProviderName()
+                        )
+                        return done({ name: 'SSO_LOGIN_FAILED', message: ErrorMessage.UNKNOWN_USER }, undefined)
                     }
-                )
+                }
             )
+
+            strategy.authorizationParams = () => ({
+                access_type: 'offline'
+            })
+
+            passport.use('google', strategy)
         } else {
             passport.unuse('google')
         }
@@ -123,7 +147,9 @@ class GoogleSSO extends SSOBase {
                 client_id: clientID,
                 redirect_uri: redirectURL,
                 response_type: 'code',
-                scope: 'openid email profile'
+                scope: GoogleSSO.SCOPE,
+                access_type: 'offline',
+                prompt: 'consent'
             }).toString()}`
 
             const tokenResponse = await axios.get(authorizationUrl)
@@ -131,6 +157,38 @@ class GoogleSSO extends SSOBase {
         } catch (error) {
             const errorMessage = 'Google Configuration test failed. Please check your credentials.'
             return { error: errorMessage }
+        }
+    }
+
+    private async storeGoogleTokens(
+        userId: string,
+        accessToken: string | object,
+        refreshToken: string,
+        params?: { [key: string]: unknown }
+    ) {
+        const dataSource = getRunningExpressApp().AppDataSource
+        const queryRunner = dataSource.createQueryRunner()
+        await queryRunner.connect()
+
+        try {
+            const accessTokenValue = typeof accessToken === 'string' ? accessToken : JSON.stringify(accessToken)
+            const expiresIn = Number(params?.expires_in ?? params?.expiresIn ?? params?.expires)
+            const tokenExpiry = Number.isFinite(expiresIn) && expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000) : null
+
+            const updatePayload: Partial<User> = {
+                googleAccessToken: accessTokenValue,
+                googleTokenExpiry: tokenExpiry
+            }
+
+            if (refreshToken) {
+                updatePayload.googleRefreshToken = refreshToken
+            }
+
+            await queryRunner.manager.update(User, { id: userId }, updatePayload)
+        } finally {
+            if (!queryRunner.isReleased) {
+                await queryRunner.release()
+            }
         }
     }
 
