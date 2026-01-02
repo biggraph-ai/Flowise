@@ -33,6 +33,15 @@ export class User {
     @CreateDateColumn({ nullable: true })
     tokenExpiry?: Date | null
 
+    @Column({ type: 'text', nullable: true })
+    googleAccessToken?: string | null
+
+    @Column({ type: 'text', nullable: true })
+    googleRefreshToken?: string | null
+
+    @Column({ type: 'timestamp', nullable: true })
+    googleTokenExpiry?: Date | null
+
     @Column({ type: 'varchar', length: 20, default: UserStatus.UNVERIFIED })
     status: string
 
