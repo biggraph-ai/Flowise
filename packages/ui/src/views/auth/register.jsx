@@ -43,7 +43,7 @@ const RegisterEnterpriseUserSchema = z
         email: z.string().min(1, 'Email is required').email('Invalid email address'),
         password: passwordSchema,
         confirmPassword: z.string().min(1, 'Confirm Password is required'),
-        token: z.string().min(1, 'Invite Code is required')
+        token: z.string().optional()
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: "Passwords don't match",
@@ -339,9 +339,7 @@ const RegisterPage = () => {
                             {isEnterpriseLicensed && (
                                 <Box>
                                     <div style={{ display: 'flex', flexDirection: 'row' }}>
-                                        <Typography>
-                                            Invite Code<span style={{ color: 'red' }}>&nbsp;*</span>
-                                        </Typography>
+                                        <Typography>Invite Code</Typography>
                                         <div style={{ flexGrow: 1 }}></div>
                                     </div>
                                     <OutlinedInput

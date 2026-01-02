@@ -26,6 +26,7 @@ import { UserErrorMessage, UserService } from './user.service'
 import { WorkspaceUserErrorMessage, WorkspaceUserService } from './workspace-user.service'
 import { WorkspaceErrorMessage, WorkspaceService } from './workspace.service'
 import { sanitizeUser } from '../../utils/sanitize.util'
+import logger from '../../utils/logger'
 import { destroyAllSessionsForUser } from '../middleware/passport/SessionPersistance'
 
 type AccountDTO = {
@@ -205,9 +206,13 @@ export class AccountService {
                     data.workspace.name = WorkspaceName.DEFAULT_PERSONAL_WORKSPACE
                     data.workspaceUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.PERSONAL_WORKSPACE, queryRunner)
                 } else {
+                    // Enterprise self-registration (no temp token); workspace name derived from email.
+                    logger.warn(`[AccountService] Enterprise self-registration without invite for ${data.user.email ?? 'unknown email'}`)
                     await this.ensureOneOrganizationOnly(queryRunner)
+                    if (!data.user.email) throw new InternalFlowiseError(StatusCodes.BAD_REQUEST, UserErrorMessage.INVALID_USER_EMAIL)
                     data.organizationUser.role = await this.roleService.readGeneralRoleByName(GeneralRole.OWNER, queryRunner)
-                    data.workspace.name = WorkspaceName.DEFAULT_WORKSPACE
+                    const rawWorkspaceName = data.user.email.replace('@', '_')
+                    data.workspace.name = rawWorkspaceName.replace(/[^a-zA-Z0-9_-]/g, '_')
                     data.workspaceUser.role = data.organizationUser.role
                     data.user.status = UserStatus.ACTIVE
                     data.user = await this.userService.createNewUser(data.user, queryRunner)

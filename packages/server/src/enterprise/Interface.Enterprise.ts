@@ -127,7 +127,7 @@ export const RegisterUserSchema = z
             .regex(/\d/, 'Password must contain at least one digit')
             .regex(/[^a-zA-Z0-9]/, 'Password must contain at least one special character'),
         confirmPassword: z.string().min(1, 'Confirm Password is required'),
-        token: z.string().min(1, 'Invite Code is required')
+        token: z.string().optional()
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: "Passwords don't match",
