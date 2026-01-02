@@ -259,7 +259,7 @@ export class IdentityManager {
     }
 
     public async getFeaturesByPlan(subscriptionId: string, withoutCache: boolean = false) {
-        if (this.isEnterprise()) {
+        if (this.isEnterprise() || (this.isOpenSource() && process.env.FORCE_OS_ENTERPRISE_FEATURES === 'true')) {
             const features: Record<string, string> = {}
             for (const feature of ENTERPRISE_FEATURE_FLAGS) {
                 features[feature] = 'true'
