@@ -247,6 +247,12 @@ const SignInPage = () => {
                         />
                         <Stack spacing={2} sx={{ position: 'relative' }}>
                             <Box
+                                component='img'
+                                src='/logo.svg'
+                                alt='BigGraph AI logo'
+                                sx={{ width: 215, height: 215, objectFit: 'contain' }}
+                            />
+                            <Box
                                 sx={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
